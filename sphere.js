@@ -8,13 +8,14 @@ K.addHeader('Machine', 'SWGN2');
 // Pattern Parameters: 
 // Pat: defines pattern in terms of delta increases per section of the row.
 
-// For hard-coded phere-like object use:
-let pat = [6, 2, 0, 2, 0, 2, 0, 2, 0,-2, 0, -2, 0, -2, 0,-2, 0, -2, -2]
+// For hard-coded sphere-like object use:
+// let pat = [2, 2, 0, 2, 0, 2, 0, 2, 0,2,0,2,0,-2,0,-2, 0, -2, 0, -2, 0,-2, 0, -2]
+let pat = [2,2,2,2,2,2,2,2,-2,-2,-2,-2,-2,-2,-2,-2];
+let heights = [2,3,4,5,6,6,7,8,8,7,6,6,5,4,3,2];
 
+let caston_height = pat[0];
 // For turd-like spheroid object:
 // let pat = [10, 2, 0, 2, 0, 2, 0, 2, 0,-2, 0, -2, 0, -2, 0,-2, 0, -2, -2, 0, 2, 0,2,2, 0,-2, 0, -2, -2, -2,-2,-0,2, 2,0, -2, -2, -2,-2,-2,-2]
-
-let caston_height = 2;
 
 // Inc_offset determines where we should start reading the pattern to determine increases.
 // As the bottom of sphere will be looser than the top. 
@@ -22,11 +23,10 @@ let inc_offset = 4;
 
 // Rows: # of rows/delta change within the pattern itself. 
 let rows = pat.length; 
-let height = 3;
 
 // Sections: # of "peels" for the "orange" (sphere). 
 // I.e. if we have three sections, then there will be a total of 6 sections in the object.
-let sections = 4; 
+let sections = 5; 
 
 // Machine Parameters:
 let carrier = "3"; 
@@ -45,16 +45,17 @@ let max = 2*pat[0] +2*Math.floor((1/2));
 
  * min: the needle to start the bindoff on. 
  * max: the needle to stop the bindoff on. 
+ * g: gauge
  */
-function bindoff_front(min, max, slack){
+function bindoff_front(min, max, slack, g, tube){
     for (let i = max; i > min + 1; i -= 1) {
-        if (i % 2 == 0) {
-            K.tuck("+", "b" + (i + 2*slack), carrier); 
-            K.rack(2);
-            K.xfer("f" + i, 'b' + (i - 2));
+        if ((i % 2 == 0)||(!tube)) {
+            K.tuck("+", "b" + (i + g*slack), carrier); 
+            K.rack(g);
+            K.xfer("f" + i, 'b' + (i - g));
             K.rack(0);
-            K.xfer("b" + (i - 2), "f" + (i - 2)); 
-            K.knit("-", "f" + (i - 2), carrier)
+            K.xfer("b" + (i - g), "f" + (i - g)); 
+            K.knit("-", "f" + (i - g), carrier)
         }
     }
 }
@@ -63,16 +64,17 @@ function bindoff_front(min, max, slack){
 
  * min: the needle to start the bindoff on. 
  * max: the needle to stop the bindoff on. 
+ * g: gauge
  */
-function bindoff_back(min, max, slack){
+function bindoff_back(min, max, slack, g, tube){
     for (let i = min; i < max - 1; i += 1) {
-        if (i % 2 != 0) {
-            K.tuck("-", "f" + (i - 2*slack), carrier); 
-            K.rack(2);
-            K.xfer("b" + (i), 'f' + (i + 2));
+        if ((i % 2 != 0)||(!tube)) {
+            K.tuck("-", "f" + (i - g*slack), carrier); 
+            K.rack(g);
+            K.xfer("b" + (i), 'f' + (i + g));
             K.rack(0);
-            K.xfer("f" + (i + 2), "b" + (i + 2)); 
-            K.knit("+", "b" + (i + 2), carrier);
+            K.xfer("f" + (i + g), "b" + (i + g)); 
+            K.knit("+", "b" + (i + g), carrier);
         }
     }
 }
@@ -118,7 +120,7 @@ function tag(last) {
  */
  function bindoff_tube(min, max) {
     // Knit front side of bindoff. 
-    bindoff_front(min, max, 0);
+    bindoff_front(min, max, 0, gauge, true);
 
     K.rack(1);
     K.xfer("f" + (min + 1), "b" + min);
@@ -126,7 +128,7 @@ function tag(last) {
     K.knit("+", "b" + min, carrier);
 
     // Knit back side of bindoff.
-    bindoff_back(min, max, 0);
+    bindoff_back(min, max, 0, gauge, true);
 
     // Drop all needles used for the bindoff. 
     for (let i = max; i >= min; i--) {
@@ -143,6 +145,31 @@ function tag(last) {
     tag(max - 1, carrier);
 }
 
+/* This function performs a stretchy bind off that closes a tube.
+ * After the bindoff, a tag is knit.
+
+ * min, max: the leftmost and rightmost needle numbers. 
+ */
+function bindoff_closed(min, max) {
+    // Xfer all back loops to front:
+    for (let n = temp_min; n <= sections*max; n += gauge) {
+        K.xfer('b' + n, 'f' + n);
+    }
+
+    // Knit front side of bindoff.
+    bindoff_front(min - 1, max , 0, 1, false);
+
+    // Drop all needles used for the bindoff. 
+    for (let i = min; i < max; i++) {
+        K.drop("b", i);
+    }
+    K.drop("b", max);
+
+    // Tag. 
+    K.xfer("f" + (max), "b" + (max));
+    tag(min , carrier);
+
+}
 
 /* This function increases entire row in pattern by [pattern_offset] in each section. 
  *
@@ -151,25 +178,22 @@ function tag(last) {
 function row_inc(pattern_offset, h) {
     for (let i = 1; i <= sections; i++){
         temp_min = min
-        temp_max= (i)*max + (i)*pattern_offset;
+        temp_max= (i)*max + (i)*pattern_offset - 1;
         
         // TODO: Reduce number of overall transfers in pattern.
         // First, xfer ALL stitches from back to front.
-        for (let n = temp_min; n <= sections*max + i*pattern_offset; n += gauge) {
+        for (let n = temp_min; n <sections*max + i*pattern_offset - 1; n += gauge) {
             K.xfer('b' + n, 'f' + n);
         }
 
-
         // Then, xfer ALL stitches back, from front to back with no offset
-        for (let n = temp_min; n <= temp_max; n += 1) {
+        for (let n = temp_min; n < temp_max; n += 1) {
             K.xfer('f' + n, 'b' + n);
         }
 
         // Apply offset to remaining stitches. 
-
-        // TODO: Add split increase here to minimize hole in pattern.
         K.rack(-pattern_offset);
-        for (let n = temp_max; n <= sections*max + i*pattern_offset; n += 1) {
+        for (let n = temp_max; n <  sections*max + i*pattern_offset - 1; n += 1) {
             n2= n + pattern_offset;
             K.xfer('f' + n, 'b' + n2);
         }
@@ -180,6 +204,36 @@ function row_inc(pattern_offset, h) {
             K.xfer('b' + n, 'f' + n);
         }
     }
+
+    // Secure row + Add split increases. 
+    for (let i = sections; i >= 1; i--){
+        temp_max = i*(max + pattern_offset);
+        temp_min = (i - 1)*(max + pattern_offset);
+        
+        K.rack(-pattern_offset)
+        K.split("-",  "f" + (temp_max - pattern_offset), "b" + (temp_max), carrier)
+        K.rack(0)
+        K.xfer("b" + (temp_max), "f" + (temp_max));
+        
+        for (let n = temp_max - pattern_offset - 2; n > temp_min; n -= gauge) {
+            K.knit("-", 'f' + n, carrier);
+        }
+    }
+
+    // Secure row + Add split increases on the back. 
+    for (let i = 1; i <= sections; i++){
+        temp_max = i*(max + pattern_offset) - 1;
+        temp_min = (i - 1)*(max + pattern_offset) - 1;
+        for (let n = temp_min + 2; n < temp_max - pattern_offset - 1; n += gauge) {
+            K.knit("+", 'b' + n, carrier);
+        }
+
+        K.rack(pattern_offset);
+        K.split("+",  "b" + (temp_max - pattern_offset), "f" + (temp_max), carrier)
+        K.rack(0);
+        K.xfer("f" + (temp_max), "b" + (temp_max));
+    }
+
 
     // Secure increases by knitting through row [h] # of times.. 
     for (let s = 0; s < h; s++){
@@ -385,18 +439,21 @@ create_caston();
 secure_caston(caston_height);
 
 /* ------------------------------ PATTERN ------------------------------ */
-for (let k = 1; k<rows; k++){ 
+for (let k = 1; k < rows; k++){ 
     let pattern_offset = pat[k];
+    let pattern_height = heights[k];
     if (pattern_offset == 0) {
-        row_no_offset(height);
+        row_no_offset(pattern_height);
     } else if (pattern_offset < 0){
-        row_dec(-pattern_offset, height);
+        row_dec(-pattern_offset, pattern_height);
     } else{
-        row_inc(pattern_offset, height);
+        row_inc(pattern_offset, pattern_height);
     }
 }
 
 /* ----------------------------- BIND-OFF ------------------------------ */
-bindoff_tube(min, sections*max);
+// For tube/open bindoff: bindoff_tube(min, sections*max);
+bindoff_closed(min, sections*max); 
+//bindoff_tube(min, sections*max);
 K.outhook(carrier);
 K.write('sphere.k');
